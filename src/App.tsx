@@ -12,7 +12,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { Transaction } from './lib/types';
-import { useAuth } from './lib/auth';
+import { useAuth, parseAuthErrorFromURL, clearAuthErrorFromURL } from './lib/auth';
 import { saveUpload, loadTransactions } from './lib/persistence';
 import Landing from './pages/Landing';
 import UploadPage from './pages/Upload';
@@ -27,10 +27,22 @@ export default function App() {
   const [view, setView] = useState<View>('landing');
   const [loadingData, setLoadingData] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Detect OAuth errors in URL (e.g. Google redirect failure)
+  useEffect(() => {
+    const urlError = parseAuthErrorFromURL();
+    if (urlError) {
+      setAuthError(urlError);
+      setView('auth');
+      clearAuthErrorFromURL();
+    }
+  }, []);
 
   // Load transactions from Supabase when user logs in
   useEffect(() => {
     if (!isAuthenticated || !user) return;
+    setAuthError(null);
     setLoadingData(true);
     loadTransactions(user.id).then((txs) => {
       if (txs.length > 0) {
@@ -72,8 +84,9 @@ export default function App() {
     return (
       <div className="min-h-screen bg-dark-950">
         <AuthPage
-          onBack={() => setView('landing')}
+          onBack={() => { setView('landing'); setAuthError(null); }}
           onSuccess={() => setView(transactions.length > 0 ? 'dashboard' : 'upload')}
+          initialError={authError}
         />
       </div>
     );

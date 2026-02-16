@@ -1,40 +1,84 @@
-import { useState } from 'react';
-import { useAuth } from '../lib/auth';
-import { Mail, Lock, ArrowLeft, Loader2, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useAuth, parseAuthErrorFromURL, clearAuthErrorFromURL } from '../lib/auth';
+import {
+  Mail,
+  Lock,
+  ArrowLeft,
+  Loader2,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+} from 'lucide-react';
 
 interface Props {
   onBack: () => void;
   onSuccess: () => void;
+  initialError?: string | null;
 }
 
-export default function AuthPage({ onBack, onSuccess }: Props) {
+export default function AuthPage({ onBack, onSuccess, initialError }: Props) {
   const { signInWithEmail, signUpWithEmail, signInWithMagicLink, signInWithGoogle } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup' | 'magic'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [magicSent, setMagicSent] = useState(false);
+  const [error, setError] = useState<string | null>(initialError ?? null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Check for OAuth errors in URL on mount
+  useEffect(() => {
+    const urlError = parseAuthErrorFromURL();
+    if (urlError) {
+      setError(urlError);
+      clearAuthErrorFromURL();
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     if (mode === 'magic') {
       const { error: err } = await signInWithMagicLink(email);
-      if (err) setError(err);
-      else setMagicSent(true);
+      if (err) {
+        setError(err);
+      } else {
+        setSuccess(`Hemos enviado un link mágico a ${email}. Revisa tu bandeja de entrada.`);
+      }
     } else if (mode === 'login') {
       const { error: err } = await signInWithEmail(email, password);
-      if (err) setError(err);
-      else onSuccess();
+      if (err) {
+        setError(err);
+      } else {
+        onSuccess();
+      }
     } else {
-      const { error: err } = await signUpWithEmail(email, password);
-      if (err) setError(err);
-      else onSuccess();
+      const { error: err, needsConfirmation } = await signUpWithEmail(email, password);
+      if (err) {
+        setError(err);
+      } else if (needsConfirmation) {
+        setSuccess(
+          `¡Cuenta creada! Hemos enviado un email de confirmación a ${email}. Revisa tu bandeja (y spam).`
+        );
+      } else {
+        onSuccess();
+      }
     }
     setLoading(false);
+  };
+
+  const handleGoogleLogin = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch {
+      setError('No se pudo conectar con Google. Inténtalo de nuevo.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,35 +104,58 @@ export default function AuthPage({ onBack, onSuccess }: Props) {
               <Sparkles className="h-7 w-7 text-luca-300" />
             </div>
             <h1 className="text-2xl font-bold text-white">
-              {mode === 'login' ? 'Bienvenido de vuelta' : mode === 'signup' ? 'Crea tu cuenta' : 'Link mágico'}
+              {mode === 'login'
+                ? 'Bienvenido de vuelta'
+                : mode === 'signup'
+                ? 'Crea tu cuenta'
+                : 'Link mágico'}
             </h1>
             <p className="mt-2 text-sm text-white/50">
               {mode === 'magic'
-                ? 'Te enviamos un link a tu email'
-                : 'Guarda tus datos y accede desde cualquier lugar'}
+                ? 'Te enviamos un link a tu email para entrar sin contraseña'
+                : mode === 'signup'
+                ? 'Guarda tus análisis y accede desde cualquier dispositivo'
+                : 'Accede a tus datos financieros guardados'}
             </p>
           </div>
 
-          {magicSent ? (
-            <div className="text-center py-6">
-              <Mail className="mx-auto h-12 w-12 text-luca-400 mb-4" />
-              <p className="text-white font-medium">Revisa tu email</p>
-              <p className="text-sm text-white/50 mt-2">
-                Hemos enviado un link a <span className="text-white">{email}</span>
+          {/* Success message */}
+          {success ? (
+            <div className="text-center py-4">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
+                <CheckCircle2 className="h-8 w-8 text-emerald-400" />
+              </div>
+              <p className="text-white font-medium mb-2">
+                {mode === 'signup' ? '¡Cuenta creada!' : '¡Revisa tu email!'}
               </p>
-              <button
-                onClick={() => { setMagicSent(false); setMode('login'); }}
-                className="mt-6 text-sm text-luca-400 hover:text-luca-300"
-              >
-                Volver al login
-              </button>
+              <p className="text-sm text-white/60 leading-relaxed">{success}</p>
+              <div className="mt-6 space-y-3">
+                <button
+                  onClick={() => {
+                    setSuccess(null);
+                    setMode('login');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-luca-500 to-luca-600 py-3 text-sm font-bold text-white"
+                >
+                  <Mail className="h-4 w-4" />
+                  Ya confirmé, iniciar sesión
+                </button>
+                <button
+                  onClick={() => setSuccess(null)}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/10 py-2.5 text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Reenviar email
+                </button>
+              </div>
             </div>
           ) : (
             <>
               {/* Google Login */}
               <button
-                onClick={signInWithGoogle}
-                className="w-full flex items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-50"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -108,6 +175,32 @@ export default function AuthPage({ onBack, onSuccess }: Props) {
                 </div>
               </div>
 
+              {/* Error message */}
+              {error && (
+                <div className="mb-4 flex items-start gap-2.5 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3">
+                  <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-red-300">{error}</p>
+                    {error.includes('confirma tu cuenta') && (
+                      <button
+                        onClick={() => setMode('magic')}
+                        className="mt-1 text-xs text-luca-400 hover:text-luca-300 underline"
+                      >
+                        Enviar link mágico (sin contraseña)
+                      </button>
+                    )}
+                    {error.includes('iniciar sesión') && (
+                      <button
+                        onClick={() => { setMode('login'); setError(null); }}
+                        className="mt-1 text-xs text-luca-400 hover:text-luca-300 underline"
+                      >
+                        Ir a iniciar sesión
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Email form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -117,7 +210,7 @@ export default function AuthPage({ onBack, onSuccess }: Props) {
                       type="email"
                       placeholder="tu@email.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => { setEmail(e.target.value); setError(null); }}
                       required
                       className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-luca-500 focus:outline-none focus:ring-1 focus:ring-luca-500"
                     />
@@ -130,9 +223,9 @@ export default function AuthPage({ onBack, onSuccess }: Props) {
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                       <input
                         type="password"
-                        placeholder="Contraseña"
+                        placeholder={mode === 'signup' ? 'Contraseña (mín. 6 caracteres)' : 'Contraseña'}
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => { setPassword(e.target.value); setError(null); }}
                         required
                         minLength={6}
                         className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-luca-500 focus:outline-none focus:ring-1 focus:ring-luca-500"
@@ -141,17 +234,17 @@ export default function AuthPage({ onBack, onSuccess }: Props) {
                   </div>
                 )}
 
-                {error && (
-                  <p className="text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">{error}</p>
-                )}
-
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-luca-500 to-luca-600 py-3 text-sm font-bold text-white shadow-lg shadow-luca-500/20 hover:shadow-xl hover:shadow-luca-500/30 transition-all disabled:opacity-50"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Crear cuenta' : 'Enviar link'}
+                  {mode === 'login'
+                    ? 'Entrar'
+                    : mode === 'signup'
+                    ? 'Crear cuenta'
+                    : 'Enviar link mágico'}
                 </button>
               </form>
 
@@ -159,19 +252,31 @@ export default function AuthPage({ onBack, onSuccess }: Props) {
               <div className="mt-6 flex flex-col items-center gap-2 text-sm">
                 {mode === 'login' ? (
                   <>
-                    <button onClick={() => setMode('signup')} className="text-luca-400 hover:text-luca-300">
+                    <button
+                      onClick={() => { setMode('signup'); setError(null); }}
+                      className="text-luca-400 hover:text-luca-300"
+                    >
                       ¿No tienes cuenta? Regístrate
                     </button>
-                    <button onClick={() => setMode('magic')} className="text-white/40 hover:text-white/60">
-                      Entrar con link mágico
+                    <button
+                      onClick={() => { setMode('magic'); setError(null); }}
+                      className="text-white/40 hover:text-white/60"
+                    >
+                      Entrar sin contraseña (link mágico)
                     </button>
                   </>
                 ) : mode === 'signup' ? (
-                  <button onClick={() => setMode('login')} className="text-luca-400 hover:text-luca-300">
+                  <button
+                    onClick={() => { setMode('login'); setError(null); }}
+                    className="text-luca-400 hover:text-luca-300"
+                  >
                     ¿Ya tienes cuenta? Inicia sesión
                   </button>
                 ) : (
-                  <button onClick={() => setMode('login')} className="text-luca-400 hover:text-luca-300">
+                  <button
+                    onClick={() => { setMode('login'); setError(null); }}
+                    className="text-luca-400 hover:text-luca-300"
+                  >
                     Volver al login con contraseña
                   </button>
                 )}
@@ -181,7 +286,7 @@ export default function AuthPage({ onBack, onSuccess }: Props) {
         </div>
 
         <p className="mt-4 text-center text-xs text-white/30">
-          Tus datos nunca salen de tu cuenta. 100% privado.
+          Tus datos financieros se encriptan y son 100% privados.
         </p>
       </div>
     </div>
