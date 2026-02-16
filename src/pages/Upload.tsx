@@ -5,7 +5,7 @@ import { parseCaixaBankCSV } from '../lib/parsers/caixabank';
 import { parseRevolutCSV } from '../lib/parsers/revolut';
 
 interface Props {
-  onTransactionsLoaded: (transactions: Transaction[]) => void;
+  onTransactionsLoaded: (transactions: Transaction[], filename?: string, source?: string) => void;
   hasData: boolean;
   onGoToDashboard: () => void;
 }
@@ -63,7 +63,7 @@ function detectSource(filename: string, content: string): FileUpload['source'] {
 export default function Upload({ onTransactionsLoaded, hasData, onGoToDashboard }: Props) {
   const handleFileParsed = (upload: FileUpload) => {
     if (upload.status === 'done' && upload.transactions.length > 0) {
-      onTransactionsLoaded(upload.transactions);
+      onTransactionsLoaded(upload.transactions, upload.name, upload.source);
     }
   };
 

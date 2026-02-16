@@ -22,6 +22,7 @@ import {
 
 interface Props {
   onGetStarted: () => void;
+  onLogin?: () => void;
 }
 
 const MOCK_MONTHS = ['Ago', 'Sep', 'Oct', 'Nov', 'Dic', 'Ene', 'Feb'];
@@ -37,7 +38,7 @@ const MOCK_CATEGORIES = [
   { name: 'Otros', pct: 5, color: '#6b7280', amount: '€60/mes' },
 ];
 
-export default function Landing({ onGetStarted }: Props) {
+export default function Landing({ onGetStarted, onLogin: _onLogin }: Props) {
   return (
     <div className="relative overflow-hidden">
       {/* === HERO === */}
